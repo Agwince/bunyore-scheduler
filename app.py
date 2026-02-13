@@ -9,15 +9,15 @@ from collections import defaultdict
 # ============================================
 st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
 
-# --- EDIT THIS TO CHANGE THE BELL TIMES ---
+# --- BELL TIMES ---
 BELL_SCHEDULE = {
     "Lesson 1": "8:00 - 8:40",
     "Lesson 2": "8:40 - 9:20",
-    "Lesson 3": "9:30 - 10:10",  # Short break before this
+    "Lesson 3": "9:30 - 10:10",  
     "Lesson 4": "10:10 - 10:50",
-    "Lesson 5": "11:20 - 12:00", # Tea break before this
+    "Lesson 5": "11:20 - 12:00", 
     "Lesson 6": "12:00 - 12:40",
-    "Lesson 7": "1:40 - 2:20",   # Lunch break before this
+    "Lesson 7": "1:40 - 2:20",   
     "Lesson 8": "2:20 - 3:00",
     "Lesson 9": "3:00 - 3:40"
 }
@@ -27,7 +27,7 @@ st.markdown("**Smart Scheduling System** | Hybrid CBC & 8-4-4")
 st.markdown("---")
 
 # ============================================
-# 2. SIDEBAR - INPUT DATA
+# 2. SIDEBAR - INPUT DATA & GRAPH
 # ============================================
 st.sidebar.header("1. Setup School Data")
 
@@ -47,6 +47,24 @@ default_data = pd.DataFrame([
 st.sidebar.subheader("Edit Teacher Load")
 edited_df = st.data_editor(default_data, num_rows="dynamic")
 
+# --- WORKLOAD GRAPH (Restored!) ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Workload Fairness")
+workload_data = edited_df.copy()
+# Count lessons by splitting commas
+workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
+
+# Draw the Chart
+st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
+
+# Overload Alert
+overloaded = workload_data[workload_data['Lessons'] > 25]
+if not overloaded.empty:
+    st.sidebar.error(f"⚠️ Overload: {', '.join(overloaded['Teacher'].tolist())}")
+else:
+    st.sidebar.success("✅ Workload Balanced")
+# ----------------------------------
+
 # Settings
 st.sidebar.header("2. Settings")
 streams_input = st.sidebar.text_input("Class Streams", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3G, 4B")
@@ -59,12 +77,12 @@ times = [f"Lesson {i+1}" for i in range(slots_per_day)]
 # 3. THE GENERATOR ENGINE
 # ============================================
 def generate_timetable(df, streams, days, times):
-    # Create the Master Schedule Structure
     schedule = {day: {t: {s: "FREE" for s in streams} for t in times} for day in days}
     teacher_busy = defaultdict(lambda: defaultdict(set))
     
-    # Randomize processing order
-    df = df.sample(frac=1).reset_index(drop=True)
+    # Sort by workload (Hardest teachers first) to optimize
+    df['Workload'] = df['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
+    df = df.sort_values('Workload', ascending=False)
 
     for index, row in df.iterrows():
         teacher = row['Teacher']
@@ -88,7 +106,7 @@ def generate_timetable(df, streams, days, times):
     return schedule
 
 # ============================================
-# 4. HTML REPORT GENERATOR (Updated with Breaks)
+# 4. HTML REPORT GENERATOR
 # ============================================
 def create_styled_html(schedule, mode, target_name, days, times, streams):
     css = """
@@ -111,12 +129,9 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     html = f"<html><head>{css}</head><body>"
     html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
     
-    # --- HELPER TO INSERT BREAKS ---
     def insert_breaks_if_needed(current_lesson_index, colspan):
-        # Add Tea Break after Lesson 4
         if current_lesson_index == 4:
             return f"<tr class='break-row'><td colspan='{colspan}'>☕ TEA BREAK (10:50 - 11:20)</td></tr>"
-        # Add Lunch after Lesson 6
         elif current_lesson_index == 6:
             return f"<tr class='break-row'><td colspan='{colspan}'>🍛 LUNCH BREAK (12:40 - 1:40)</td></tr>"
         return ""
@@ -126,16 +141,10 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
         html += "<table><tr><th width='15%'>Time</th>"
         for day in days: html += f"<th>{day}</th>"
         html += "</tr>"
-        
-        # Loop through lessons (rows) instead of days for better readability
         for i, time in enumerate(times):
-            # Insert Breaks
             html += insert_breaks_if_needed(i, len(days) + 1)
-            
-            # Get Real Time from Dictionary
             real_time = BELL_SCHEDULE.get(time, time)
             html += f"<tr><td><b>{real_time}</b><br><span style='font-size:0.8em;color:#999'>{time}</span></td>"
-            
             for day in days:
                 cell = schedule[day][time][target_name]
                 if cell == "FREE": html += "<td class='free'>-</td>"
@@ -151,12 +160,10 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
         html += "<table><tr><th width='15%'>Time</th>"
         for day in days: html += f"<th>{day}</th>"
         html += "</tr>"
-        
         for i, time in enumerate(times):
             html += insert_breaks_if_needed(i, len(days) + 1)
             real_time = BELL_SCHEDULE.get(time, time)
             html += f"<tr><td><b>{real_time}</b><br><span style='font-size:0.8em;color:#999'>{time}</span></td>"
-            
             for day in days:
                 found_class = "-"
                 found_subj = "-"
@@ -166,7 +173,6 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
                         found_class = s
                         found_subj = cell.split('(')[0]
                         break
-                
                 if found_class == "-": html += "<td class='free'>FREE</td>"
                 else: html += f"<td><span class='subject'>{found_class}</span><span class='detail'>{found_subj}</span></td>"
             html += "</tr>"
@@ -178,7 +184,6 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
             html += f"<h3>{day}</h3><table><tr><th>Time</th>"
             for s in streams: html += f"<th>{s}</th>"
             html += "</tr>"
-            
             for i, time in enumerate(times):
                 html += insert_breaks_if_needed(i, len(streams) + 1)
                 real_time = BELL_SCHEDULE.get(time, time)
