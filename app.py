@@ -5,9 +5,22 @@ import base64
 from collections import defaultdict
 
 # ============================================
-# 1. PAGE CONFIGURATION
+# 1. CONFIGURATION & BELL SCHEDULE
 # ============================================
 st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
+
+# --- EDIT THIS TO CHANGE THE BELL TIMES ---
+BELL_SCHEDULE = {
+    "Lesson 1": "8:00 - 8:40",
+    "Lesson 2": "8:40 - 9:20",
+    "Lesson 3": "9:30 - 10:10",  # Short break before this
+    "Lesson 4": "10:10 - 10:50",
+    "Lesson 5": "11:20 - 12:00", # Tea break before this
+    "Lesson 6": "12:00 - 12:40",
+    "Lesson 7": "1:40 - 2:20",   # Lunch break before this
+    "Lesson 8": "2:20 - 3:00",
+    "Lesson 9": "3:00 - 3:40"
+}
 
 st.title("🎓 Bunyore Girls High School")
 st.markdown("**Smart Scheduling System** | Hybrid CBC & 8-4-4")
@@ -68,7 +81,6 @@ def generate_timetable(df, streams, days, times):
             for day, time in all_slots:
                 if schedule[day][time][cls] == "FREE":
                     if teacher not in teacher_busy[day][time]:
-                        # Store as: "Maths (Tr. Kamau)"
                         schedule[day][time][cls] = f"{subject} ({teacher})"
                         teacher_busy[day][time].add(teacher)
                         assigned = True
@@ -76,10 +88,9 @@ def generate_timetable(df, streams, days, times):
     return schedule
 
 # ============================================
-# 4. HTML REPORT GENERATOR (The "Pretty" Part)
+# 4. HTML REPORT GENERATOR (Updated with Breaks)
 # ============================================
 def create_styled_html(schedule, mode, target_name, days, times, streams):
-    # CSS Styling
     css = """
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
@@ -89,7 +100,7 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
         table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 12px; }
         th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
         th { background-color: #f2f2f2; color: #333; font-weight: bold; }
-        tr:nth-child(even) { background-color: #fcfcfc; }
+        .break-row { background-color: #fff3cd; font-weight: bold; color: #856404; text-transform: uppercase; letter-spacing: 2px;}
         .subject { font-weight: bold; color: #004d99; display: block; margin-bottom: 2px;}
         .detail { font-size: 0.9em; color: #666; font-style: italic; }
         .free { color: #ccc; }
@@ -100,33 +111,32 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     html = f"<html><head>{css}</head><body>"
     html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
     
-    if mode == "Master":
-        html += f"<h2>OFFICIAL MASTER TIMETABLE</h2></div>"
-        # Loop through ALL days for Master
-        for day in days:
-            html += f"<h3>{day}</h3><table><tr><th>Time</th>"
-            for s in streams: html += f"<th>{s}</th>"
-            html += "</tr>"
-            for time in times:
-                html += f"<tr><td><b>{time}</b></td>"
-                for s in streams:
-                    cell = schedule[day][time][s]
-                    if cell == "FREE": html += "<td class='free'>-</td>"
-                    else:
-                        subj = cell.split('(')[0]
-                        teach = cell.split('(')[1].replace(')', '')
-                        html += f"<td><span class='subject'>{subj}</span><span class='detail'>{teach}</span></td>"
-                html += "</tr>"
-            html += "</table><br>"
+    # --- HELPER TO INSERT BREAKS ---
+    def insert_breaks_if_needed(current_lesson_index, colspan):
+        # Add Tea Break after Lesson 4
+        if current_lesson_index == 4:
+            return f"<tr class='break-row'><td colspan='{colspan}'>☕ TEA BREAK (10:50 - 11:20)</td></tr>"
+        # Add Lunch after Lesson 6
+        elif current_lesson_index == 6:
+            return f"<tr class='break-row'><td colspan='{colspan}'>🍛 LUNCH BREAK (12:40 - 1:40)</td></tr>"
+        return ""
 
-    elif mode == "Class":
+    if mode == "Class":
         html += f"<h2>CLASS TIMETABLE: <span style='color:blue'>{target_name}</span></h2></div>"
-        html += "<table><tr><th>Day</th>"
-        for time in times: html += f"<th>{time}</th>"
+        html += "<table><tr><th width='15%'>Time</th>"
+        for day in days: html += f"<th>{day}</th>"
         html += "</tr>"
-        for day in days:
-            html += f"<tr><td><b>{day}</b></td>"
-            for time in times:
+        
+        # Loop through lessons (rows) instead of days for better readability
+        for i, time in enumerate(times):
+            # Insert Breaks
+            html += insert_breaks_if_needed(i, len(days) + 1)
+            
+            # Get Real Time from Dictionary
+            real_time = BELL_SCHEDULE.get(time, time)
+            html += f"<tr><td><b>{real_time}</b><br><span style='font-size:0.8em;color:#999'>{time}</span></td>"
+            
+            for day in days:
                 cell = schedule[day][time][target_name]
                 if cell == "FREE": html += "<td class='free'>-</td>"
                 else:
@@ -138,18 +148,21 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
 
     elif mode == "Teacher":
         html += f"<h2>PERSONAL TIMETABLE: <span style='color:green'>{target_name}</span></h2></div>"
-        html += "<table><tr><th>Day</th>"
-        for time in times: html += f"<th>{time}</th>"
+        html += "<table><tr><th width='15%'>Time</th>"
+        for day in days: html += f"<th>{day}</th>"
         html += "</tr>"
-        for day in days:
-            html += f"<tr><td><b>{day}</b></td>"
-            for time in times:
-                # Find where this teacher is
+        
+        for i, time in enumerate(times):
+            html += insert_breaks_if_needed(i, len(days) + 1)
+            real_time = BELL_SCHEDULE.get(time, time)
+            html += f"<tr><td><b>{real_time}</b><br><span style='font-size:0.8em;color:#999'>{time}</span></td>"
+            
+            for day in days:
                 found_class = "-"
                 found_subj = "-"
                 for s in streams:
                     cell = schedule[day][time][s]
-                    if target_name in cell: # Check if teacher name is in the cell string
+                    if target_name in cell:
                         found_class = s
                         found_subj = cell.split('(')[0]
                         break
@@ -159,6 +172,27 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
             html += "</tr>"
         html += "</table>"
 
+    elif mode == "Master":
+        html += f"<h2>OFFICIAL MASTER TIMETABLE</h2></div>"
+        for day in days:
+            html += f"<h3>{day}</h3><table><tr><th>Time</th>"
+            for s in streams: html += f"<th>{s}</th>"
+            html += "</tr>"
+            
+            for i, time in enumerate(times):
+                html += insert_breaks_if_needed(i, len(streams) + 1)
+                real_time = BELL_SCHEDULE.get(time, time)
+                html += f"<tr><td><b>{real_time}</b></td>"
+                for s in streams:
+                    cell = schedule[day][time][s]
+                    if cell == "FREE": html += "<td class='free'>-</td>"
+                    else:
+                        subj = cell.split('(')[0]
+                        teach = cell.split('(')[1].replace(')', '')
+                        html += f"<td><span class='subject'>{subj}</span><span class='detail'>{teach}</span></td>"
+                html += "</tr>"
+            html += "</table><br>"
+
     html += "<div class='footer'>Generated by Bunyore Smart Scheduler | System Developer: Agwince Kagali</div></body></html>"
     return html
 
@@ -167,18 +201,15 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
 # ============================================
 if st.button("🚀 Generate Timetable", type="primary"):
     with st.spinner("Calculating..."):
-        # We store the schedule in 'session_state' so it doesn't disappear when we click download
         st.session_state['schedule'] = generate_timetable(edited_df, streams, days, times)
         st.success("Timetable Generated Successfully!")
 
-# Check if schedule exists
 if 'schedule' in st.session_state:
     schedule = st.session_state['schedule']
     
     st.write("---")
     st.header("📥 Download Center")
     
-    # The 3-Way Choice
     download_type = st.radio("Who is this timetable for?", 
                              ["🏫 Class (Student)", "👨‍🏫 Teacher (Personal)", "👑 Headteacher (Master)"], 
                              horizontal=True)
@@ -190,7 +221,6 @@ if 'schedule' in st.session_state:
             st.download_button(f"⬇️ Download {target} Timetable", html, f"{target}_Timetable.html", "text/html")
 
     elif "Teacher" in download_type:
-        # Get list of teachers from the dataframe
         teacher_list = edited_df['Teacher'].unique().tolist()
         target = st.selectbox("Select Teacher:", teacher_list)
         if st.button(f"Generate PDF for {target}"):
