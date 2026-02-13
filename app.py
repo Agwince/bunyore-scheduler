@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import random
-import io
 import base64
 from collections import defaultdict
 
@@ -10,7 +9,8 @@ from collections import defaultdict
 # ============================================
 st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
 
-st.title("🎓 Bunyore Girls High School - Smart Scheduler")
+st.title("🎓 Bunyore Girls High School")
+st.markdown("**Smart Scheduling System** | Hybrid CBC & 8-4-4")
 st.markdown("---")
 
 # ============================================
@@ -34,13 +34,6 @@ default_data = pd.DataFrame([
 st.sidebar.subheader("Edit Teacher Load")
 edited_df = st.data_editor(default_data, num_rows="dynamic")
 
-# Workload Graph
-st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Workload Fairness")
-workload_data = edited_df.copy()
-workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
-st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
-
 # Settings
 st.sidebar.header("2. Settings")
 streams_input = st.sidebar.text_input("Class Streams", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3G, 4B")
@@ -53,10 +46,11 @@ times = [f"Lesson {i+1}" for i in range(slots_per_day)]
 # 3. THE GENERATOR ENGINE
 # ============================================
 def generate_timetable(df, streams, days, times):
+    # Create the Master Schedule Structure
     schedule = {day: {t: {s: "FREE" for s in streams} for t in times} for day in days}
     teacher_busy = defaultdict(lambda: defaultdict(set))
     
-    # Shuffle teachers to ensure randomness
+    # Randomize processing order
     df = df.sample(frac=1).reset_index(drop=True)
 
     for index, row in df.iterrows():
@@ -74,92 +68,139 @@ def generate_timetable(df, streams, days, times):
             for day, time in all_slots:
                 if schedule[day][time][cls] == "FREE":
                     if teacher not in teacher_busy[day][time]:
-                        schedule[day][time][cls] = f"{subject}<br><span style='font-size:0.8em; color:gray'>({teacher})</span>"
+                        # Store as: "Maths (Tr. Kamau)"
+                        schedule[day][time][cls] = f"{subject} ({teacher})"
                         teacher_busy[day][time].add(teacher)
                         assigned = True
                         break
     return schedule
 
-# Function to create the HTML Report
-def create_html_report(timetable_data, day_view):
+# ============================================
+# 4. HTML REPORT GENERATOR (The "Pretty" Part)
+# ============================================
+def create_styled_html(schedule, mode, target_name, days, times, streams):
     # CSS Styling
-    html = f"""
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; padding: 20px; }}
-            h1 {{ color: #2c3e50; text-align: center; }}
-            table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
-            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: center; }}
-            th {{ background-color: #f2f2f2; color: #333; }}
-            tr:nth-child(even) {{ background-color: #f9f9f9; }}
-            .subject {{ font-weight: bold; color: #2980b9; }}
-            .teacher {{ font-size: 0.85em; color: #7f8c8d; display: block; }}
-            .footer {{ margin-top: 30px; text-align: center; font-size: 0.8em; color: #777; }}
-        </style>
-    </head>
-    <body>
-        <h1>🎓 Bunyore Girls High School</h1>
-        <h3>Master Timetable - {day_view}</h3>
-        <table>
-            <tr>
-                <th>Time Slot</th>
-                {''.join(f'<th>{s}</th>' for s in streams)}
-            </tr>
+    css = """
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
+        .header { text-align: center; border-bottom: 3px solid #b30000; padding-bottom: 10px; margin-bottom: 20px; }
+        .header h1 { margin: 0; color: #b30000; font-size: 24px; text-transform: uppercase; }
+        .header h2 { margin: 5px 0; color: #555; font-size: 18px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 12px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; color: #333; font-weight: bold; }
+        tr:nth-child(even) { background-color: #fcfcfc; }
+        .subject { font-weight: bold; color: #004d99; display: block; margin-bottom: 2px;}
+        .detail { font-size: 0.9em; color: #666; font-style: italic; }
+        .free { color: #ccc; }
+        .footer { margin-top: 20px; text-align: center; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 10px;}
+    </style>
     """
     
-    for time in times:
-        html += f"<tr><td><b>{time}</b></td>"
-        for stream in streams:
-            cell = timetable_data[day_view][time][stream]
-            if cell == "FREE":
-                html += "<td style='background-color: #fff5f5;'>-</td>"
-            else:
-                # Clean up the string for display
-                clean_cell = cell.replace('<br>', '</div><div class="teacher">').replace('span', 'span')
-                html += f"<td><div class='subject'>{clean_cell}</div></td>"
-        html += "</tr>"
+    html = f"<html><head>{css}</head><body>"
+    html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
+    
+    if mode == "Master":
+        html += f"<h2>OFFICIAL MASTER TIMETABLE</h2></div>"
+        # Loop through ALL days for Master
+        for day in days:
+            html += f"<h3>{day}</h3><table><tr><th>Time</th>"
+            for s in streams: html += f"<th>{s}</th>"
+            html += "</tr>"
+            for time in times:
+                html += f"<tr><td><b>{time}</b></td>"
+                for s in streams:
+                    cell = schedule[day][time][s]
+                    if cell == "FREE": html += "<td class='free'>-</td>"
+                    else:
+                        subj = cell.split('(')[0]
+                        teach = cell.split('(')[1].replace(')', '')
+                        html += f"<td><span class='subject'>{subj}</span><span class='detail'>{teach}</span></td>"
+                html += "</tr>"
+            html += "</table><br>"
 
-    html += """
-        </table>
-        <div class="footer">Generated by Bunyore Smart Scheduler | System Developer: Agwince Kagali</div>
-    </body>
-    </html>
-    """
+    elif mode == "Class":
+        html += f"<h2>CLASS TIMETABLE: <span style='color:blue'>{target_name}</span></h2></div>"
+        html += "<table><tr><th>Day</th>"
+        for time in times: html += f"<th>{time}</th>"
+        html += "</tr>"
+        for day in days:
+            html += f"<tr><td><b>{day}</b></td>"
+            for time in times:
+                cell = schedule[day][time][target_name]
+                if cell == "FREE": html += "<td class='free'>-</td>"
+                else:
+                    subj = cell.split('(')[0]
+                    teach = cell.split('(')[1].replace(')', '')
+                    html += f"<td><span class='subject'>{subj}</span><span class='detail'>{teach}</span></td>"
+            html += "</tr>"
+        html += "</table>"
+
+    elif mode == "Teacher":
+        html += f"<h2>PERSONAL TIMETABLE: <span style='color:green'>{target_name}</span></h2></div>"
+        html += "<table><tr><th>Day</th>"
+        for time in times: html += f"<th>{time}</th>"
+        html += "</tr>"
+        for day in days:
+            html += f"<tr><td><b>{day}</b></td>"
+            for time in times:
+                # Find where this teacher is
+                found_class = "-"
+                found_subj = "-"
+                for s in streams:
+                    cell = schedule[day][time][s]
+                    if target_name in cell: # Check if teacher name is in the cell string
+                        found_class = s
+                        found_subj = cell.split('(')[0]
+                        break
+                
+                if found_class == "-": html += "<td class='free'>FREE</td>"
+                else: html += f"<td><span class='subject'>{found_class}</span><span class='detail'>{found_subj}</span></td>"
+            html += "</tr>"
+        html += "</table>"
+
+    html += "<div class='footer'>Generated by Bunyore Smart Scheduler | System Developer: Agwince Kagali</div></body></html>"
     return html
 
 # ============================================
-# 4. MAIN INTERFACE
+# 5. MAIN INTERFACE
 # ============================================
 if st.button("🚀 Generate Timetable", type="primary"):
     with st.spinner("Calculating..."):
-        timetable_data = generate_timetable(edited_df, streams, days, times)
-        st.success("Timetable Generated!")
+        # We store the schedule in 'session_state' so it doesn't disappear when we click download
+        st.session_state['schedule'] = generate_timetable(edited_df, streams, days, times)
+        st.success("Timetable Generated Successfully!")
 
-        # TABS
-        tab1, tab2 = st.tabs(["📅 Monday View", "📥 Download Center"])
+# Check if schedule exists
+if 'schedule' in st.session_state:
+    schedule = st.session_state['schedule']
+    
+    st.write("---")
+    st.header("📥 Download Center")
+    
+    # The 3-Way Choice
+    download_type = st.radio("Who is this timetable for?", 
+                             ["🏫 Class (Student)", "👨‍🏫 Teacher (Personal)", "👑 Headteacher (Master)"], 
+                             horizontal=True)
 
-        with tab1:
-            # Display raw dataframe for quick check
-            day_df = pd.DataFrame(timetable_data['Mon']).T
-            # Simple clean up for display
-            st.write(day_df.style.set_properties(**{'text-align': 'center'}))
+    if "Class" in download_type:
+        target = st.selectbox("Select Class:", streams)
+        if st.button(f"Generate PDF for {target}"):
+            html = create_styled_html(schedule, "Class", target, days, times, streams)
+            st.download_button(f"⬇️ Download {target} Timetable", html, f"{target}_Timetable.html", "text/html")
 
-        with tab2:
-            st.header("📥 Download Professional Reports")
-            st.write("Select a day to generate a colored HTML report. You can print this to PDF.")
-            
-            selected_day = st.selectbox("Select Day to Print", days)
-            
-            # Generate HTML
-            html_code = create_html_report(timetable_data, selected_day)
-            
-            # Download Button
-            st.download_button(
-                label=f"📄 Download {selected_day} Timetable (Colorful)",
-                data=html_code,
-                file_name=f"Bunyore_Timetable_{selected_day}.html",
-                mime="text/html"
-            )
-            
-            st.info("💡 **Tip:** After downloading, open the file and select **'Share' > 'Print' > 'Save as PDF'** on your phone to get the final PDF file.")
+    elif "Teacher" in download_type:
+        # Get list of teachers from the dataframe
+        teacher_list = edited_df['Teacher'].unique().tolist()
+        target = st.selectbox("Select Teacher:", teacher_list)
+        if st.button(f"Generate PDF for {target}"):
+            html = create_styled_html(schedule, "Teacher", target, days, times, streams)
+            st.download_button(f"⬇️ Download {target}'s Timetable", html, f"{target}_Timetable.html", "text/html")
+
+    elif "Headteacher" in download_type:
+        st.info("This will generate the full Master Schedule for all classes.")
+        if st.button("Generate Master File"):
+            html = create_styled_html(schedule, "Master", "HEADTEACHER", days, times, streams)
+            st.download_button("⬇️ Download Master Timetable", html, "Master_Timetable.html", "text/html")
+
+    st.warning("👉 **Tip:** After downloading, open the file -> Tap Menu -> Share -> Print -> **Save as PDF**.")
