@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import random
-import base64
 from collections import defaultdict
 
 # ============================================
@@ -9,7 +8,7 @@ from collections import defaultdict
 # ============================================
 st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
 
-# --- BELL TIMES ---
+# --- BELL TIMES (Edit these if the school changes time) ---
 BELL_SCHEDULE = {
     "Lesson 1": "8:00 - 8:40",
     "Lesson 2": "8:40 - 9:20",
@@ -22,13 +21,42 @@ BELL_SCHEDULE = {
     "Lesson 9": "3:00 - 3:40"
 }
 
+# ============================================
+# 2. LOGIN SYSTEM (SECURITY LEVEL 2)
+# ============================================
+# Initialize Session State
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+# Sidebar Login Screen
+if not st.session_state['logged_in']:
+    st.sidebar.title("🔒 Admin Access")
+    password = st.sidebar.text_input("Enter Password:", type="password")
+    
+    if st.sidebar.button("Login"):
+        # --- CHANGE THE PASSWORD BELOW ---
+        if password == "bunyore2026": 
+            st.session_state['logged_in'] = True
+            st.rerun()
+        else:
+            st.sidebar.error("❌ Access Denied")
+            
+    st.title("🎓 Bunyore Girls High School")
+    st.warning("⚠️ System Locked. Please log in from the sidebar to access the scheduler.")
+    st.stop() # Stop here if not logged in
+
+# ============================================
+# 3. MAIN APP (Only visible after login)
+# ============================================
+st.sidebar.success("✅ Logged In: Administrator")
+if st.sidebar.button("Logout"):
+    st.session_state['logged_in'] = False
+    st.rerun()
+
 st.title("🎓 Bunyore Girls High School")
 st.markdown("**Smart Scheduling System** | Hybrid CBC & 8-4-4")
 st.markdown("---")
 
-# ============================================
-# 2. SIDEBAR - INPUT DATA & GRAPH
-# ============================================
 st.sidebar.header("1. Setup School Data")
 
 # Default Sample Data
@@ -47,22 +75,17 @@ default_data = pd.DataFrame([
 st.sidebar.subheader("Edit Teacher Load")
 edited_df = st.data_editor(default_data, num_rows="dynamic")
 
-# --- WORKLOAD GRAPH (Restored!) ---
+# --- WORKLOAD GRAPH ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Workload Fairness")
 workload_data = edited_df.copy()
-# Count lessons by splitting commas
 workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
-
-# Draw the Chart
 st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
 
 # Overload Alert
 overloaded = workload_data[workload_data['Lessons'] > 25]
 if not overloaded.empty:
     st.sidebar.error(f"⚠️ Overload: {', '.join(overloaded['Teacher'].tolist())}")
-else:
-    st.sidebar.success("✅ Workload Balanced")
 # ----------------------------------
 
 # Settings
@@ -74,13 +97,12 @@ days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 times = [f"Lesson {i+1}" for i in range(slots_per_day)]
 
 # ============================================
-# 3. THE GENERATOR ENGINE
+# 4. THE GENERATOR ENGINE
 # ============================================
 def generate_timetable(df, streams, days, times):
     schedule = {day: {t: {s: "FREE" for s in streams} for t in times} for day in days}
     teacher_busy = defaultdict(lambda: defaultdict(set))
     
-    # Sort by workload (Hardest teachers first) to optimize
     df['Workload'] = df['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
     df = df.sort_values('Workload', ascending=False)
 
@@ -106,7 +128,7 @@ def generate_timetable(df, streams, days, times):
     return schedule
 
 # ============================================
-# 4. HTML REPORT GENERATOR
+# 5. HTML REPORT GENERATOR
 # ============================================
 def create_styled_html(schedule, mode, target_name, days, times, streams):
     css = """
@@ -125,7 +147,6 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
         .footer { margin-top: 20px; text-align: center; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 10px;}
     </style>
     """
-    
     html = f"<html><head>{css}</head><body>"
     html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
     
@@ -202,7 +223,7 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     return html
 
 # ============================================
-# 5. MAIN INTERFACE
+# 6. MAIN INTERFACE
 # ============================================
 if st.button("🚀 Generate Timetable", type="primary"):
     with st.spinner("Calculating..."):
