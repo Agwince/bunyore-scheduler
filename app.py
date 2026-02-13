@@ -5,9 +5,9 @@ import io
 from collections import defaultdict
 
 # ============================================
-# 1. PAGE CONFIGURATION (Make it look Professional)
+# 1. PAGE CONFIGURATION
 # ============================================
-st.set_page_config(page_title="Smart Scheduler Pro", layout="wide")
+st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide")
 
 st.title("🎓 Bunyore Girls High School - Smart Scheduler")
 st.markdown("""
@@ -16,11 +16,11 @@ st.markdown("""
 """)
 
 # ============================================
-# 2. SIDEBAR - INPUT DATA
+# 2. SIDEBAR - INPUT DATA & GRAPHS
 # ============================================
 st.sidebar.header("1. Setup School Data")
 
-# Default Sample Data (So the demo works immediately)
+# Default Sample Data
 default_data = pd.DataFrame([
     {"Teacher": "Tr. Kamau", "Subject": "Maths", "Classes": "1R, 1G, 2B"},
     {"Teacher": "Tr. Wanjiku", "Subject": "English", "Classes": "3R, 3G, 4B"},
@@ -32,14 +32,34 @@ default_data = pd.DataFrame([
     {"Teacher": "Tr. Jane", "Subject": "Biology", "Classes": "4B, 3R"},
 ], columns=["Teacher", "Subject", "Classes"])
 
-# Data Editor (Excel-like editing on the web)
+# Data Editor
 st.sidebar.subheader("Edit Teacher Load")
 edited_df = st.data_editor(default_data, num_rows="dynamic")
 
-# Configuration
+# --- NEW FEATURE: WORKLOAD GRAPH ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Workload Fairness Check")
+
+# Calculate workload (Count how many streams each teacher has)
+# We create a copy so we don't mess up the main data
+workload_data = edited_df.copy()
+workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
+
+# Display the Bar Chart
+st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
+
+# Overload Alert (If a teacher has > 5 classes, show warning)
+overloaded = workload_data[workload_data['Lessons'] > 5]
+if not overloaded.empty:
+    st.sidebar.error(f"⚠️ Overload Alert: {', '.join(overloaded['Teacher'].tolist())} have too many classes!")
+else:
+    st.sidebar.success("✅ Workload is balanced.")
+
+# --- END NEW FEATURE ---
+
 st.sidebar.header("2. Settings")
-streams = st.sidebar.text_input("Class Streams (Comma Separated)", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3G, 4B").split(',')
-streams = [s.strip() for s in streams]
+streams_input = st.sidebar.text_input("Class Streams (Comma Separated)", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3G, 4B")
+streams = [s.strip() for s in streams_input.split(',')]
 
 slots_per_day = st.sidebar.slider("Lessons per Day", 5, 9, 9)
 days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -51,25 +71,23 @@ times = [f"Lesson {i+1}" for i in range(slots_per_day)]
 def generate_timetable(df, streams, days, times):
     # Initialize empty schedule
     schedule = {day: {t: {s: "FREE" for s in streams} for t in times} for day in days}
-    teacher_busy = defaultdict(lambda: defaultdict(set)) # Track teacher collisions
+    teacher_busy = defaultdict(lambda: defaultdict(set)) 
     
-    # Sort teachers by workload (Hardest first)
-    # We calculate workload by counting how many classes they have in the "Classes" column
-    df['Workload'] = df['Classes'].apply(lambda x: len(x.split(',')))
+    # Add workload column for sorting (Hardest teachers first)
+    df['Workload'] = df['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
     df = df.sort_values('Workload', ascending=False)
 
     for index, row in df.iterrows():
         teacher = row['Teacher']
         subject = row['Subject']
-        target_classes = [c.strip() for c in row['Classes'].split(',')]
+        if not row['Classes']: continue
+        target_classes = [c.strip() for c in str(row['Classes']).split(',')]
 
         for cls in target_classes:
-            if cls not in streams: continue # Skip if class doesn't exist in settings
+            if cls not in streams: continue 
 
             # Attempt to find a slot
             assigned = False
-            
-            # Try every day/time slot randomly
             all_slots = [(d, t) for d in days for t in times]
             random.shuffle(all_slots)
 
@@ -84,10 +102,6 @@ def generate_timetable(df, streams, days, times):
                         assigned = True
                         break
             
-            if not assigned:
-                # In a real app, we would log this as a "Conflict"
-                pass
-                
     return schedule
 
 # ============================================
@@ -96,16 +110,13 @@ def generate_timetable(df, streams, days, times):
 
 if st.button("🚀 Generate Timetable", type="primary"):
     with st.spinner("Calculating non-colliding paths..."):
-        # Run the engine
         timetable_data = generate_timetable(edited_df, streams, days, times)
         st.success("Timetable Generated Successfully!")
 
-        # Display tabs for different views
         tab1, tab2 = st.tabs(["📅 Master Timetable", "🏫 Class Views"])
 
         with tab1:
             st.write("### Master Schedule (Monday Preview)")
-            # Convert Monday to DataFrame for display
             mon_data = pd.DataFrame(timetable_data['Mon']).T
             st.dataframe(mon_data, use_container_width=True)
 
@@ -113,7 +124,6 @@ if st.button("🚀 Generate Timetable", type="primary"):
             st.write("### Select a Class to View")
             selected_class = st.selectbox("Choose Class", streams)
             
-            # Build class specific table
             class_schedule = []
             for d in days:
                 row = {"Day": d}
@@ -129,7 +139,6 @@ if st.button("🚀 Generate Timetable", type="primary"):
         st.write("---")
         st.header("📥 Downloads")
         
-        # Create Excel in memory
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             # Sheet 1: Master Monday
@@ -150,4 +159,4 @@ if st.button("🚀 Generate Timetable", type="primary"):
             data=output.getvalue(),
             file_name="Bunyore_Smart_Schedule.xlsx",
             mime="application/vnd.ms-excel"
-)
+        )
