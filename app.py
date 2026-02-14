@@ -36,7 +36,7 @@ if not st.session_state['logged_in']:
     password = st.sidebar.text_input("Enter Password:", type="password")
     
     if st.sidebar.button("Login"):
-        # --- CHANGE PASSWORD HERE IF NEEDED ---
+        # --- CHANGE PASSWORD HERE ---
         if password == "bunyore2026": 
             st.session_state['logged_in'] = True
             st.rerun()
@@ -61,7 +61,7 @@ st.markdown("---")
 
 st.sidebar.header("1. Setup School Data")
 
-# Default Sample Data (Updated to show it's working)
+# Default Sample Data
 default_data = pd.DataFrame([
     {"Teacher": "Tr. Ms. Kagali", "Subject": "Kiswahili", "Classes": "3Y, 4P"},
     {"Teacher": "Tr. Kamau", "Subject": "Maths", "Classes": "1R, 1G, 2B"},
@@ -76,6 +76,22 @@ default_data = pd.DataFrame([
 # Data Editor
 st.sidebar.subheader("Edit Teacher Load")
 edited_df = st.data_editor(default_data, num_rows="dynamic")
+
+# --- I HAVE PUT THE GRAPH BACK HERE ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Workload Fairness")
+workload_data = edited_df.copy()
+# Count lessons by splitting commas
+workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
+
+# Draw the Chart
+st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
+
+# Overload Alert
+overloaded = workload_data[workload_data['Lessons'] > 25]
+if not overloaded.empty:
+    st.sidebar.error(f"⚠️ Overload: {', '.join(overloaded['Teacher'].tolist())}")
+# --------------------------------------
 
 # Settings
 st.sidebar.header("2. Settings")
@@ -117,7 +133,7 @@ def generate_timetable(df, streams, days, times):
     return schedule
 
 # ============================================
-# 5. HTML REPORT GENERATOR (Matches Photo Layout)
+# 5. HTML REPORT GENERATOR
 # ============================================
 def create_styled_html(schedule, mode, target_name, days, times, streams):
     css = """
@@ -139,7 +155,6 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     html = f"<html><head>{css}</head><body>"
     html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
     
-    # --- BREAKS LOGIC ---
     def insert_breaks_if_needed(current_lesson_index, colspan):
         # Lesson 2 is index 1. Break is AFTER lesson 2.
         if current_lesson_index == 2:
