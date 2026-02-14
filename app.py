@@ -8,45 +8,46 @@ from collections import defaultdict
 # ============================================
 st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
 
-# --- BELL TIMES (Edit these if the school changes time) ---
+# --- EXACT TIMES FROM THE PHOTO ---
 BELL_SCHEDULE = {
     "Lesson 1": "8:00 - 8:40",
     "Lesson 2": "8:40 - 9:20",
+    # Short Break here (9:20 - 9:30)
     "Lesson 3": "9:30 - 10:10",  
     "Lesson 4": "10:10 - 10:50",
+    # Tea Break here (10:50 - 11:20)
     "Lesson 5": "11:20 - 12:00", 
     "Lesson 6": "12:00 - 12:40",
-    "Lesson 7": "1:40 - 2:20",   
-    "Lesson 8": "2:20 - 3:00",
-    "Lesson 9": "3:00 - 3:40"
+    "Lesson 7": "12:40 - 1:20",   
+    # Lunch Break here (1:20 - 2:00)
+    "Lesson 8": "2:00 - 2:40",
+    "Lesson 9": "2:40 - 3:20",
+    "Lesson 10": "3:20 - 4:00"
 }
 
 # ============================================
 # 2. LOGIN SYSTEM (SECURITY LEVEL 2)
 # ============================================
-# Initialize Session State
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-# Sidebar Login Screen
 if not st.session_state['logged_in']:
     st.sidebar.title("🔒 Admin Access")
     password = st.sidebar.text_input("Enter Password:", type="password")
     
     if st.sidebar.button("Login"):
-        # --- CHANGE THE PASSWORD BELOW ---
-        if password == "bunyore2026": 
+        if password == "bunyore2026": # <--- CHANGE THIS TO YOUR SECRET PASSWORD
             st.session_state['logged_in'] = True
             st.rerun()
         else:
             st.sidebar.error("❌ Access Denied")
             
     st.title("🎓 Bunyore Girls High School")
-    st.warning("⚠️ System Locked. Please log in from the sidebar to access the scheduler.")
-    st.stop() # Stop here if not logged in
+    st.warning("⚠️ System Locked. Please log in to access.")
+    st.stop()
 
 # ============================================
-# 3. MAIN APP (Only visible after login)
+# 3. MAIN APP
 # ============================================
 st.sidebar.success("✅ Logged In: Administrator")
 if st.sidebar.button("Logout"):
@@ -61,12 +62,12 @@ st.sidebar.header("1. Setup School Data")
 
 # Default Sample Data
 default_data = pd.DataFrame([
+    {"Teacher": "Tr. Ms. Kagali", "Subject": "Kiswahili", "Classes": "3Y, 4P"},
     {"Teacher": "Tr. Kamau", "Subject": "Maths", "Classes": "1R, 1G, 2B"},
     {"Teacher": "Tr. Wanjiku", "Subject": "English", "Classes": "3R, 3G, 4B"},
     {"Teacher": "Tr. Otieno", "Subject": "Chemistry", "Classes": "2R, 2G, 1B"},
     {"Teacher": "Tr. Alice", "Subject": "History", "Classes": "1R, 2R, 3R"},
     {"Teacher": "Tr. Omondi", "Subject": "Physics", "Classes": "3G, 4B"},
-    {"Teacher": "Tr. Sarah", "Subject": "Kiswahili", "Classes": "1G, 2B, 3G"},
     {"Teacher": "Tr. Kevin", "Subject": "CRE", "Classes": "1R, 1G, 1B"},
     {"Teacher": "Tr. Jane", "Subject": "Biology", "Classes": "4B, 3R"},
 ], columns=["Teacher", "Subject", "Classes"])
@@ -75,24 +76,11 @@ default_data = pd.DataFrame([
 st.sidebar.subheader("Edit Teacher Load")
 edited_df = st.data_editor(default_data, num_rows="dynamic")
 
-# --- WORKLOAD GRAPH ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Workload Fairness")
-workload_data = edited_df.copy()
-workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
-st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
-
-# Overload Alert
-overloaded = workload_data[workload_data['Lessons'] > 25]
-if not overloaded.empty:
-    st.sidebar.error(f"⚠️ Overload: {', '.join(overloaded['Teacher'].tolist())}")
-# ----------------------------------
-
 # Settings
 st.sidebar.header("2. Settings")
-streams_input = st.sidebar.text_input("Class Streams", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3G, 4B")
+streams_input = st.sidebar.text_input("Class Streams", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3Y, 4P, 4B")
 streams = [s.strip() for s in streams_input.split(',')]
-slots_per_day = st.sidebar.slider("Lessons per Day", 5, 9, 9)
+slots_per_day = st.sidebar.slider("Lessons per Day", 5, 10, 10) # Updated to 10
 days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 times = [f"Lesson {i+1}" for i in range(slots_per_day)]
 
@@ -150,11 +138,17 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     html = f"<html><head>{css}</head><body>"
     html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
     
+    # --- UPDATED BREAK LOGIC TO MATCH PHOTO ---
     def insert_breaks_if_needed(current_lesson_index, colspan):
-        if current_lesson_index == 4:
+        # After Lesson 2: Short Break
+        if current_lesson_index == 2:
+            return f"<tr class='break-row'><td colspan='{colspan}'>🔔 SHORT BREAK (9:20 - 9:30)</td></tr>"
+        # After Lesson 4: Tea Break
+        elif current_lesson_index == 4:
             return f"<tr class='break-row'><td colspan='{colspan}'>☕ TEA BREAK (10:50 - 11:20)</td></tr>"
-        elif current_lesson_index == 6:
-            return f"<tr class='break-row'><td colspan='{colspan}'>🍛 LUNCH BREAK (12:40 - 1:40)</td></tr>"
+        # After Lesson 7: Lunch Break (The image shows Lunch starts 1:20)
+        elif current_lesson_index == 7:
+            return f"<tr class='break-row'><td colspan='{colspan}'>🍛 LUNCH BREAK (1:20 - 2:00)</td></tr>"
         return ""
 
     if mode == "Class":
@@ -258,5 +252,3 @@ if 'schedule' in st.session_state:
         if st.button("Generate Master File"):
             html = create_styled_html(schedule, "Master", "HEADTEACHER", days, times, streams)
             st.download_button("⬇️ Download Master Timetable", html, "Master_Timetable.html", "text/html")
-
-    st.warning("👉 **Tip:** After downloading, open the file -> Tap Menu -> Share -> Print -> **Save as PDF**.")
