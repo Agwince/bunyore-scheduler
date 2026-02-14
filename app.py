@@ -8,25 +8,25 @@ from collections import defaultdict
 # ============================================
 st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
 
-# --- EXACT TIMES FROM THE PHOTO ---
+# --- EXACT TIMES FROM MS. KAGALI'S PHOTO ---
 BELL_SCHEDULE = {
     "Lesson 1": "8:00 - 8:40",
     "Lesson 2": "8:40 - 9:20",
-    # Short Break here (9:20 - 9:30)
+    # Short Break (10 mins) is here
     "Lesson 3": "9:30 - 10:10",  
     "Lesson 4": "10:10 - 10:50",
-    # Tea Break here (10:50 - 11:20)
+    # Tea Break (30 mins) is here
     "Lesson 5": "11:20 - 12:00", 
     "Lesson 6": "12:00 - 12:40",
     "Lesson 7": "12:40 - 1:20",   
-    # Lunch Break here (1:20 - 2:00)
+    # Lunch Break (40 mins) is here
     "Lesson 8": "2:00 - 2:40",
     "Lesson 9": "2:40 - 3:20",
     "Lesson 10": "3:20 - 4:00"
 }
 
 # ============================================
-# 2. LOGIN SYSTEM (SECURITY LEVEL 2)
+# 2. LOGIN SYSTEM
 # ============================================
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -36,7 +36,8 @@ if not st.session_state['logged_in']:
     password = st.sidebar.text_input("Enter Password:", type="password")
     
     if st.sidebar.button("Login"):
-        if password == "bunyore2026": # <--- CHANGE THIS TO YOUR SECRET PASSWORD
+        # --- CHANGE PASSWORD HERE IF NEEDED ---
+        if password == "bunyore2026": 
             st.session_state['logged_in'] = True
             st.rerun()
         else:
@@ -60,7 +61,7 @@ st.markdown("---")
 
 st.sidebar.header("1. Setup School Data")
 
-# Default Sample Data
+# Default Sample Data (Updated to show it's working)
 default_data = pd.DataFrame([
     {"Teacher": "Tr. Ms. Kagali", "Subject": "Kiswahili", "Classes": "3Y, 4P"},
     {"Teacher": "Tr. Kamau", "Subject": "Maths", "Classes": "1R, 1G, 2B"},
@@ -80,7 +81,7 @@ edited_df = st.data_editor(default_data, num_rows="dynamic")
 st.sidebar.header("2. Settings")
 streams_input = st.sidebar.text_input("Class Streams", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3Y, 4P, 4B")
 streams = [s.strip() for s in streams_input.split(',')]
-slots_per_day = st.sidebar.slider("Lessons per Day", 5, 10, 10) # Updated to 10
+slots_per_day = st.sidebar.slider("Lessons per Day", 5, 10, 10) 
 days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 times = [f"Lesson {i+1}" for i in range(slots_per_day)]
 
@@ -116,7 +117,7 @@ def generate_timetable(df, streams, days, times):
     return schedule
 
 # ============================================
-# 5. HTML REPORT GENERATOR
+# 5. HTML REPORT GENERATOR (Matches Photo Layout)
 # ============================================
 def create_styled_html(schedule, mode, target_name, days, times, streams):
     css = """
@@ -138,15 +139,15 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     html = f"<html><head>{css}</head><body>"
     html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
     
-    # --- UPDATED BREAK LOGIC TO MATCH PHOTO ---
+    # --- BREAKS LOGIC ---
     def insert_breaks_if_needed(current_lesson_index, colspan):
-        # After Lesson 2: Short Break
+        # Lesson 2 is index 1. Break is AFTER lesson 2.
         if current_lesson_index == 2:
             return f"<tr class='break-row'><td colspan='{colspan}'>🔔 SHORT BREAK (9:20 - 9:30)</td></tr>"
-        # After Lesson 4: Tea Break
+        # Lesson 4 is index 3. Break is AFTER lesson 4.
         elif current_lesson_index == 4:
             return f"<tr class='break-row'><td colspan='{colspan}'>☕ TEA BREAK (10:50 - 11:20)</td></tr>"
-        # After Lesson 7: Lunch Break (The image shows Lunch starts 1:20)
+        # Lesson 7 is index 6. Break is AFTER lesson 7.
         elif current_lesson_index == 7:
             return f"<tr class='break-row'><td colspan='{colspan}'>🍛 LUNCH BREAK (1:20 - 2:00)</td></tr>"
         return ""
