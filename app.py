@@ -8,7 +8,7 @@ import io
 # ============================================
 # 1. CONFIGURATION & BELL SCHEDULE
 # ============================================
-st.set_page_config(page_title="Bunyore Smart Scheduler", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="EduSync: Smart Scheduling System", layout="wide", page_icon="🎓")
 
 # --- EXACT TIMES FROM MS. KAGALI'S PHOTO ---
 BELL_SCHEDULE = {
