@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 from collections import defaultdict
-from gtts import gTTS # Import Google Text-to-Speech
+from gtts import gTTS 
 import io
 
 # ============================================
@@ -10,7 +10,7 @@ import io
 # ============================================
 st.set_page_config(page_title="EduSync: Smart Scheduling System", layout="wide", page_icon="🎓")
 
-# --- EXACT TIMES FROM MS. KAGALI'S PHOTO ---
+# --- EXACT TIMES FROM KAGALI'S PHOTO ---
 BELL_SCHEDULE = {
     "Lesson 1": "8:00 - 8:40",
     "Lesson 2": "8:40 - 9:20",
@@ -35,7 +35,7 @@ if not st.session_state['logged_in']:
     password = st.sidebar.text_input("Enter Password:", type="password")
     
     if st.sidebar.button("Login"):
-        if password == "bunyore2026": # <--- CHANGE PASSWORD HERE
+        if password == "bunyore2026": # PASSWORD KEPT AS REQUESTED
             st.session_state['logged_in'] = True
             st.rerun()
         else:
@@ -46,30 +46,40 @@ if not st.session_state['logged_in']:
     st.stop()
 
 # ============================================
-# 3. MAIN APP
+# 3. MAIN APP & SIDEBAR SETTINGS
 # ============================================
 st.sidebar.success("✅ Logged In: Administrator")
 if st.sidebar.button("Logout"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-st.title("🎓 Bunyore Girls High School")
+# Dynamic School Name for White-Labeling
+st.sidebar.header("1. General Settings")
+school_name = st.sidebar.text_input("🏫 Active School Name", "EduSync High School")
+
+st.title(f"🎓 {school_name}")
 st.markdown("**Smart Scheduling System** | Hybrid CBC & 8-4-4")
 st.markdown("---")
 
-st.sidebar.header("1. Setup School Data")
+st.sidebar.header("2. Setup School Data")
 
-# Default Sample Data
-default_data = pd.DataFrame([
-    {"Teacher": "Tr. Ms. Kagali", "Subject": "Kiswahili", "Classes": "3Y, 4P"},
-    {"Teacher": "Tr. Kamau", "Subject": "Maths", "Classes": "1R, 1G, 2B"},
-    {"Teacher": "Tr. Wanjiku", "Subject": "English", "Classes": "3R, 3G, 4B"},
-    {"Teacher": "Tr. Otieno", "Subject": "Chemistry", "Classes": "2R, 2G, 1B"},
-    {"Teacher": "Tr. Alice", "Subject": "History", "Classes": "1R, 2R, 3R"},
-    {"Teacher": "Tr. Omondi", "Subject": "Physics", "Classes": "3G, 4B"},
-    {"Teacher": "Tr. Kevin", "Subject": "CRE", "Classes": "1R, 1G, 1B"},
-    {"Teacher": "Tr. Jane", "Subject": "Biology", "Classes": "4B, 3R"},
-], columns=["Teacher", "Subject", "Classes"])
+# NEW FEATURE: File Uploader for Teachers
+uploaded_file = st.sidebar.file_uploader("Upload Teacher Data (CSV)", type=["csv"])
+
+if uploaded_file is not None:
+    default_data = pd.read_csv(uploaded_file)
+else:
+    # Default Sample Data
+    default_data = pd.DataFrame([
+        {"Teacher": "Tr. Ms. Kagali", "Subject": "Kiswahili", "Classes": "3Y, 4P"},
+        {"Teacher": "Tr. Kamau", "Subject": "Maths", "Classes": "1R, 1G, 2B"},
+        {"Teacher": "Tr. Wanjiku", "Subject": "English", "Classes": "3R, 3G, 4B"},
+        {"Teacher": "Tr. Otieno", "Subject": "Chemistry", "Classes": "2R, 2G, 1B"},
+        {"Teacher": "Tr. Alice", "Subject": "History", "Classes": "1R, 2R, 3R"},
+        {"Teacher": "Tr. Omondi", "Subject": "Physics", "Classes": "3G, 4B"},
+        {"Teacher": "Tr. Kevin", "Subject": "CRE", "Classes": "1R, 1G, 1B"},
+        {"Teacher": "Tr. Jane", "Subject": "Biology", "Classes": "4B, 3R"},
+    ], columns=["Teacher", "Subject", "Classes"])
 
 # Data Editor
 st.sidebar.subheader("Edit Teacher Load")
@@ -79,17 +89,17 @@ edited_df = st.data_editor(default_data, num_rows="dynamic")
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Workload Fairness")
 workload_data = edited_df.copy()
-workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
+workload_data['Lessons'] = workload_data['Classes'].apply(lambda x: len(str(x).split(',')) if pd.notna(x) and x else 0)
 st.sidebar.bar_chart(workload_data.set_index('Teacher')['Lessons'])
 
 # Overload Alert
 overloaded = workload_data[workload_data['Lessons'] > 25]
 if not overloaded.empty:
-    st.sidebar.error(f"⚠️ Overload: {', '.join(overloaded['Teacher'].tolist())}")
+    st.sidebar.error(f"⚠️ Overload Alert: {', '.join(overloaded['Teacher'].tolist())}")
 # --------------------------------------
 
 # Settings
-st.sidebar.header("2. Settings")
+st.sidebar.header("3. Class Settings")
 streams_input = st.sidebar.text_input("Class Streams", "1R, 1G, 1B, 2R, 2G, 2B, 3R, 3Y, 4P, 4B")
 streams = [s.strip() for s in streams_input.split(',')]
 slots_per_day = st.sidebar.slider("Lessons per Day", 5, 10, 10) 
@@ -103,13 +113,13 @@ def generate_timetable(df, streams, days, times):
     schedule = {day: {t: {s: "FREE" for s in streams} for t in times} for day in days}
     teacher_busy = defaultdict(lambda: defaultdict(set))
     
-    df['Workload'] = df['Classes'].apply(lambda x: len(str(x).split(',')) if x else 0)
+    df['Workload'] = df['Classes'].apply(lambda x: len(str(x).split(',')) if pd.notna(x) and x else 0)
     df = df.sort_values('Workload', ascending=False)
 
     for index, row in df.iterrows():
         teacher = row['Teacher']
         subject = row['Subject']
-        if not row['Classes']: continue
+        if pd.isna(row['Classes']) or not row['Classes']: continue
         target_classes = [c.strip() for c in str(row['Classes']).split(',')]
 
         for cls in target_classes:
@@ -128,19 +138,19 @@ def generate_timetable(df, streams, days, times):
     return schedule
 
 # ============================================
-# 5. VOICE FUNCTION (NEW FEATURE!)
+# 5. VOICE FUNCTION (Dynamic Name)
 # ============================================
-def speak_success():
-    text = "Timetable generated successfully for Bunyore Girls High School."
+def speak_success(school_name):
+    text = f"Timetable generated successfully for {school_name}."
     tts = gTTS(text=text, lang='en')
     sound_file = io.BytesIO()
     tts.write_to_fp(sound_file)
     st.audio(sound_file, format='audio/mp3', start_time=0)
 
 # ============================================
-# 6. HTML REPORT GENERATOR
+# 6. HTML REPORT GENERATOR (Dynamic Name)
 # ============================================
-def create_styled_html(schedule, mode, target_name, days, times, streams):
+def create_styled_html(schedule, mode, target_name, days, times, streams, school_name):
     css = """
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
@@ -158,7 +168,7 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
     </style>
     """
     html = f"<html><head>{css}</head><body>"
-    html += f"<div class='header'><h1>Bunyore Girls High School</h1>"
+    html += f"<div class='header'><h1>{school_name}</h1>"
     
     def insert_breaks_if_needed(current_lesson_index, colspan):
         if current_lesson_index == 2:
@@ -231,7 +241,7 @@ def create_styled_html(schedule, mode, target_name, days, times, streams):
                 html += "</tr>"
             html += "</table><br>"
 
-    html += "<div class='footer'>Generated by Bunyore Smart Scheduler | System Developer: Agwince Kagali</div></body></html>"
+    html += "<div class='footer'>Generated by EduSync Smart Scheduler | System Developer: Agwince Kagali</div></body></html>"
     return html
 
 # ============================================
@@ -243,7 +253,7 @@ if st.button("🚀 Generate Timetable", type="primary"):
         st.success("Timetable Generated Successfully!")
         
         # --- TRIGGER VOICE ---
-        speak_success()
+        speak_success(school_name)
         # ---------------------
 
 if 'schedule' in st.session_state:
@@ -259,18 +269,18 @@ if 'schedule' in st.session_state:
     if "Class" in download_type:
         target = st.selectbox("Select Class:", streams)
         if st.button(f"Generate PDF for {target}"):
-            html = create_styled_html(schedule, "Class", target, days, times, streams)
+            html = create_styled_html(schedule, "Class", target, days, times, streams, school_name)
             st.download_button(f"⬇️ Download {target} Timetable", html, f"{target}_Timetable.html", "text/html")
 
     elif "Teacher" in download_type:
         teacher_list = edited_df['Teacher'].unique().tolist()
         target = st.selectbox("Select Teacher:", teacher_list)
         if st.button(f"Generate PDF for {target}"):
-            html = create_styled_html(schedule, "Teacher", target, days, times, streams)
+            html = create_styled_html(schedule, "Teacher", target, days, times, streams, school_name)
             st.download_button(f"⬇️ Download {target}'s Timetable", html, f"{target}_Timetable.html", "text/html")
 
     elif "Headteacher" in download_type:
         st.info("This will generate the full Master Schedule for all classes.")
         if st.button("Generate Master File"):
-            html = create_styled_html(schedule, "Master", "HEADTEACHER", days, times, streams)
+            html = create_styled_html(schedule, "Master", "HEADTEACHER", days, times, streams, school_name)
             st.download_button("⬇️ Download Master Timetable", html, "Master_Timetable.html", "text/html")
