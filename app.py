@@ -41,7 +41,7 @@ if not st.session_state['logged_in']:
         else:
             st.sidebar.error("❌ Access Denied")
             
-    st.title("🎓 Bunyore Girls High School")
+    st.title("🎓 EduSync: Smart Scheduling System")
     st.warning("⚠️ System Locked. Please log in to access.")
     st.stop()
 
